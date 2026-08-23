@@ -1,4 +1,4 @@
-name: 构建未签名APK
+name: 构建APK
 
 # 触发条件：推送到 main 分支，或手动触发
 on:
@@ -34,15 +34,38 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # 4) 赋予 gradlew 执行权限（Linux 必需）
+      # 4) 生成自签名密钥（解决部分手机拒绝安装未签名 APK 的问题）
+      #    用固定占位密码即可，自签名不涉及安全，仅为了让 APK 能被正常安装。
+      - name: 生成自签名密钥
+        run: |
+          KEYSTORE=app/ci_keystore.jks
+          rm -f $KEYSTORE
+          keytool -genkeypair \
+            -dname "CN=Hidden Dictation, OU=Dev, O=Local, L=CN, S=CN, C=CN" \
+            -alias ci_key \
+            -keypass android \
+            -keystore $KEYSTORE \
+            -storepass android \
+            -validity 10000 \
+            -keyalg RSA \
+            -keysize 2048
+          # 把密钥相关变量注入后续步骤的环境
+          {
+            echo "KEYSTORE_BASE64=$(base64 -w0 $KEYSTORE)"
+            echo "KEYSTORE_PASSWORD=android"
+            echo "KEY_ALIAS=ci_key"
+            echo "KEY_PASSWORD=android"
+          } >> "$GITHUB_ENV"
+
+      # 5) 赋予 gradlew 执行权限（Linux 必需）
       - name: 赋予 gradlew 执行权限
         run: chmod +x ./gradlew
 
-      # 5) 编译 release 未签名 APK
+      # 6) 编译 release APK（自动使用上方生成的签名）
       - name: 编译 assembleRelease
         run: ./gradlew assembleRelease --no-daemon
 
-      # 6) 上传产物（未签名 APK），可在 Actions 页面下载
+      # 7) 上传产物（已签名 APK），可在 Actions 页面下载
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
         with:

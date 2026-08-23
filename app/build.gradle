@@ -29,12 +29,36 @@ android {
         }
     }
 
-    // 构建类型：release 不配置签名（GitHub Actions 生成未签名 APK，用户本地自行签名或直接使用）
+    // 签名配置：仅在 CI 提供了 KEYSTORE_BASE64 环境变量时才启用自签名，
+    // 否则 release 保持未签名（本地直接 assembleRelease 仍可产出未签名 APK，不影响功能逻辑）。
+    // 目的：解决部分国产手机拒绝安装「未签名 APK」(PACKAGE_INFO IS NULL) 的问题。
+    signingConfigs {
+        def hasKey = System.getenv("KEYSTORE_BASE64") != null && !System.getenv("KEYSTORE_BASE64").isEmpty()
+        if (hasKey) {
+            release {
+                // 把 Base64 编码的 keystore 还原为临时文件（CI 步骤里已 decode 落地）
+                def ksFile = file("$projectDir/ci_keystore.jks")
+                storeFile ksFile
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
+
+    // 构建类型：release 在有签名配置时使用签名，否则未签名
     buildTypes {
         release {
             minifyEnabled false   // 关闭混淆，保证隐身/保活代码不被裁掉、便于排查
             debuggable false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 仅当上面的 signingConfigs.release 存在时才挂签名；否则保持未签名
+            if (signingConfigs.hasProperty('release') && signingConfigs.release != null
+                    && System.getenv("KEYSTORE_BASE64") != null) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             minifyEnabled false
