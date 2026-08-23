@@ -65,7 +65,9 @@ object FloatWindowManager {
             onNeedResetTimer = { ScreenTimeTrackerHolder.reset() },
             onWrongLocked = { /* 锁死：不关闭，allowClose 已置 false */ }
         )
-        webView?.addJavascriptInterface(jsBridge, "AndroidBridge")
+        // 局部不可变引用，避免对可变属性 jsBridge 做智能转换失败（Kotlin 编译器限制）
+        val bridge = jsBridge!!
+        webView?.addJavascriptInterface(bridge, "AndroidBridge")
 
         // 加载 assets 听写页（复用指南的 writing-core.js + 统一弹窗 HTML/CSS）
         webView?.loadUrl("file:///android_asset/index.html")
@@ -127,7 +129,9 @@ object FloatWindowManager {
         usingA11yFallback = true
         try {
             if (webView?.windowToken == null && floatParams != null) {
-                a11yService.windowManager.addView(webView, floatParams)
+                // 注意：从 AccessibilityService 自身上下文取 WindowManager（API 正确，非 a11yService.windowManager）
+                val a11yWm = a11yService.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                a11yWm.addView(webView, floatParams)
             }
         } catch (_: Exception) {}
     }

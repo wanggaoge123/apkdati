@@ -1,6 +1,5 @@
 package com.hidden.dictation.ui
 
-import android.accessibilityservice.AccessibilityManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -8,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -47,37 +47,62 @@ class PermissionGuideActivity : AppCompatActivity() {
     private fun buildQueue() {
         pending.clear()
         // 1 悬浮窗
-        pending.add(PermissionItem("悬浮窗") {
-            Settings.canDrawOverlays(this)
-        }) {
-            val i = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName"))
-            startActivity(i)
-        }
+        pending.add(
+            PermissionItem(
+                name = "悬浮窗",
+                checker = { Settings.canDrawOverlays(this) },
+                launcher = {
+                    val i = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(i)
+                }
+            )
+        )
         // 2 忽略电池优化
-        pending.add(PermissionItem("忽略电池优化") {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            pm.isIgnoringBatteryOptimizations(packageName)
-        }) {
-            val i = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                Uri.parse("package:$packageName"))
-            startActivity(i)
-        }
+        pending.add(
+            PermissionItem(
+                name = "忽略电池优化",
+                checker = {
+                    val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                    pm.isIgnoringBatteryOptimizations(packageName)
+                },
+                launcher = {
+                    val i = Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(i)
+                }
+            )
+        )
         // 3 无障碍（用于自启+兜底绘制）
-        pending.add(PermissionItem("无障碍服务") {
-            isAccessibilityEnabled()
-        }) {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
+        pending.add(
+            PermissionItem(
+                name = "无障碍服务",
+                checker = { isAccessibilityEnabled() },
+                launcher = {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+            )
+        )
         // 4 后台活动（厂商定制，跳到应用详情/自启动设置；无统一 API，引导手动开启）
-        pending.add(PermissionItem("后台活动(自启动/后台管理)") {
-            true // 该项无标准检测 API，靠用户确认；仍弹一次引导，不静默跳过
-        }) {
-            // 跳到应用详情页，用户手动在厂商设置里开启自启动/后台管理
-            val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:$packageName"))
-            startActivity(i)
-        }
+        pending.add(
+            PermissionItem(
+                name = "后台活动(自启动/后台管理)",
+                // 该项无标准检测 API，靠用户确认；仍弹一次引导，不静默跳过
+                checker = { true },
+                launcher = {
+                    // 跳到应用详情页，用户手动在厂商设置里开启自启动/后台管理
+                    val i = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(i)
+                }
+            )
+        )
     }
 
     private fun isAccessibilityEnabled(): Boolean {

@@ -1,10 +1,10 @@
 package com.hidden.dictation.receiver
 
-import android.accessibilityservice.AccessibilityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
+import android.view.accessibility.AccessibilityManager
 import com.hidden.dictation.service.GuardService
 import com.hidden.dictation.service.MainService
 import com.hidden.dictation.ui.PermissionGuideActivity

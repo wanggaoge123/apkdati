@@ -40,7 +40,11 @@ class DictationRepository(private val db: AppDatabase) {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "dictation.db"
-                ).fallbackToDestructiveMigration(false).build()
+                )
+                    // Room 2.6+ 已移除 fallbackToDestructiveMigration(Boolean) 入参，改用无参版本
+                    // 作用：数据库版本下降/结构不兼容时直接重建（开发期可接受，避免升级异常崩溃）
+                    .fallbackToDestructiveMigration()
+                    .build()
                 val repo = DictationRepository(database)
                 INSTANCE = repo
                 repo
