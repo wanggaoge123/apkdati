@@ -1,0 +1,83 @@
+// app/build.gradle（模块级，包含所有依赖与签名/构建配置）
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'   // 用于 Room 注解处理器
+}
+
+android {
+    // 编译 SDK：34（Android 14），兼容 Android 10~14 全机型
+    compileSdk 34
+
+    defaultConfig {
+        // 应用包名（隐身 APP，无桌面图标，靠无障碍自启）
+        applicationId "com.hidden.dictation"
+        minSdk 29          // Android 10（API 29）起步
+        targetSdk 34       // Android 14
+        versionCode 1
+        versionName "1.0"
+
+        // 单元测试占位（CI 不需要跑，但保留扩展位）
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // 声明使用 Room 注解处理器生成的 Schema 路径（便于排查）
+    // 注意：kapt {} 必须位于 android {} 块内顶层，不能在 defaultConfig 内
+    kapt {
+        arguments {
+            arg("room.schemaLocation", "$projectDir/schemas")
+        }
+    }
+
+    // 构建类型：release 不配置签名（GitHub Actions 生成未签名 APK，用户本地自行签名或直接使用）
+    buildTypes {
+        release {
+            minifyEnabled false   // 关闭混淆，保证隐身/保活代码不被裁掉、便于排查
+            debuggable false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    // 允许在 XML 资源里用严格模式（避免隐式待定资源）
+    buildFeatures {
+        viewBinding true
+    }
+
+    // 关闭命名空间冲突检查噪音
+    namespace 'com.hidden.dictation'
+}
+
+dependencies {
+    // 核心 AndroidX
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Room 持久化（题库/答题/错题/统计全部本地永久存储，防系统清理缓存丢失）
+    implementation 'androidx.room:room-runtime:2.6.1'
+    implementation 'androidx.room:room-ktx:2.6.1'
+    kapt 'androidx.room:room-compiler:2.6.1'
+
+    // 协程（Room 异步 + 后台计时器）
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+    // WebView 已随系统提供，无需额外依赖；此处仅占位注释：
+    // 前端 writing-core.js 通过 WebView 加载 assets，识别引擎走 HanziWriter CDN
+
+    // 测试（可选）
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+}

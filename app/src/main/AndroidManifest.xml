@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AndroidManifest.xml —— 隐身配置核心文件
+  本 APP 的设计目标是：桌面无图标、无最近任务、无独立界面，仅依靠无障碍服务后台拉起。
+  下面每个"隐身相关属性"都标注了作用与依据。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ============ 权限声明 ============ -->
+    <!-- 前台服务（媒体类型）：Android 10+ 必须显式声明 foregroundServiceType -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- 前台服务类型：媒体播放（兼容 Android 14 的强校验） -->
+    <!-- 悬浮窗：方案1 依赖此权限 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 唤醒锁：持有 CPU 防止息屏计时中断 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 接收开机广播以尝试复活（Android 10+ 受限，仅作为补充） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 前台服务在 Android 14 上还需要 POST_NOTIFICATIONS（弹最低优先级静音通知） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 忽略电池优化白名单（引导用户手动授予，不静默） -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- 网络：writing-core 走 HanziWriter CDN 在线识别；断网时前端离线兜底 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ============ 应用级配置 ============ -->
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/ic_menu_close_clear_cancel"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar"
+        tools:targetApi="34">
+
+        <!--
+          ========== 唯一 Activity ==========
+          关键隐身属性（需求一.2）：
+          · android:excludeFromRecents="true"  → 不出现在多任务/最近应用列表
+          · android:noHistory="true"           → 一旦离开就销毁，不在返回栈留痕
+          · android:exported="false"           → 不允许被其他应用/桌面启动器调起（无外部入口）
+          注意：本 Activity 不声明 <intent-filter> LAUNCHER，所以桌面不会出现图标（需求一.1）。
+          它仅由无障碍服务/后台服务以显式类名启动，用于"权限引导弹窗"（透明主题，不暴露主界面）。
+        -->
+        <activity
+            android:name=".ui.PermissionGuideActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Transparent"
+            android:taskAffinity=""
+            android:launchMode="singleInstance" />
+
+        <!--
+          ========== 主前台服务（媒体类型） ==========
+          前台服务用于保活；类型 mediaPlayback，通知最低优先级、静音、无角标（需求二.1）。
+        -->
+        <service
+            android:name=".service.MainService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:process=":main" />
+
+        <!--
+          ========== 守护进程服务（独立进程 :guard） ==========
+          与 :main 双向守护：一方被杀，另一方拉起（需求二.2）。
+        -->
+        <service
+            android:name=".service.GuardService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:process=":guard" />
+
+        <!--
+          ========== 无障碍服务 ==========
+          双作用：
+          1) 作为"无图标 APP"的启动入口：系统开机/应用安装后用户开启无障碍即自动运行；
+          2) 方案2 兜底绘制：当 SYSTEM_ALERT_WINDOW 悬浮窗失效时，用无障碍的顶层绘制视图弹听写窗。
+        -->
+        <service
+            android:name=".service.FloatAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:process=":main">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+
+        <!--
+          ========== 定时自检广播接收者 ==========
+          每 60 秒检测服务/双进程/无障碍状态，被冻结则重拉（需求二.5）。
+          同时监听屏幕亮灭、开机、解锁等广播（需求二.3 / 二.4 引导触发）。
+          使用 android:exported="false" 不对外暴露，由本应用自身或系统有序广播触发。
+        -->
+        <receiver
+            android:name=".receiver.WatchdogReceiver"
+            android:exported="false"
+            android:process=":guard">
+            <intent-filter>
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.SCREEN_OFF" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.hidden.dictation.WATCHDOG_TICK" />
+                <action android:name="com.hidden.dictation.PULL_UP" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          ========== 屏幕状态/权限引导辅助接收者（主进程） ==========
+          监听解锁、用户离开等，用于重置/暂停计时与权限引导触发。
+        -->
+        <receiver
+            android:name=".receiver.ScreenStateReceiver"
+            android:exported="false"
+            android:process=":main">
+            <intent-filter>
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.SCREEN_OFF" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>手写听写</title>
+  <!-- 指南代码块②：HanziWriter CDN（联网加载标准笔画；离线时 writing-core 自动兜底发奖） -->
+  <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3/dist/hanzi-writer.min.js"></script>
+  <style>
+    /* 指南代码块④：弹窗 + 田字格样式（原样） */
+    #hw-modal {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.65);
+    }
+    #hw-modal.hidden { display: none; }
+
+    .hw-card {
+      background: #fff; border-radius: 16px; padding: 24px 28px;
+      width: min(92vw, 420px); text-align: center;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .hw-pinyin { font-size: 20px; color: #2c7be5; font-weight: 600; margin-bottom: 8px; }
+    .hw-answer { font-size: 72px; color: #333; margin: 8px 0; line-height: 1; }
+    .hw-answer.hidden { display: none; }
+
+    .hw-board { display: flex; justify-content: center; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+    .hw-grid { display: none; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    /* 田字格：用背景画米字虚线 */
+    .hw-cell {
+      position: relative; width: 160px; height: 160px;
+      background:
+        linear-gradient(#e3e3e3, #e3e3e3) center / 100% 1px no-repeat,
+        linear-gradient(#e3e3e3, #e3e3e3) center / 1px 100% no-repeat,
+        repeating-linear-gradient(45deg, transparent, transparent 14px, #f0f0f0 14px, #f0f0f0 15px),
+        repeating-linear-gradient(-45deg, transparent, transparent 14px, #f0f0f0 14px, #f0f0f0 15px),
+        #fff;
+      border: 2px solid #bbb; border-radius: 8px; overflow: hidden;
+    }
+    .hw-cell svg { width: 100% !important; height: 100% !important; display: block; cursor: crosshair; touch-action: none; }
+    .hw-idx {
+      position: absolute; top: 2px; left: 4px; font-size: 12px;
+      color: #999; z-index: 2; pointer-events: none;
+    }
+
+    .hw-status { min-height: 22px; font-size: 15px; color: #555; margin: 10px 0 16px; }
+    .hw-actions { display: flex; gap: 10px; justify-content: center; }
+    .hw-btn {
+      border: 1px solid #ccc; background: #f7f7f7; color: #333;
+      padding: 10px 18px; border-radius: 10px; font-size: 15px; cursor: pointer;
+    }
+    .hw-btn-primary { background: #2c7be5; color: #fff; border-color: #2c7be5; }
+    .hw-btn:active { transform: scale(0.96); }
+  </style>
+</head>
+<body>
+  <!-- 指南代码块③：统一弹窗 HTML（id 勿改） -->
+  <div id="hw-modal" class="hidden">
+    <div class="hw-card">
+      <div class="hw-pinyin" id="hw-pinyin"></div>
+      <div class="hw-answer hidden" id="hw-answer"></div>
+      <div class="hw-board">
+        <!-- 单字模式：显示这个田字格 -->
+        <div class="hw-cell" id="hw-cell"></div>
+        <!-- 词语模式：核心会自动在这里生成多个田字格 -->
+        <div class="hw-grid" id="hw-grid"></div>
+      </div>
+      <div class="hw-status" id="hw-status"></div>
+      <div class="hw-actions">
+        <button id="hw-submit" class="hw-btn hw-btn-primary">提交</button>
+        <button id="hw-rewrite" class="hw-btn">重写</button>
+        <button id="hw-help" class="hw-btn">看答案</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 核心脚本（指南代码块①原样） -->
+  <script src="writing-core.js"></script>
+  <!-- 安卓适配壳（注入题库、回传结果、受锁死控制） -->
+  <script src="android-bridge.js"></script>
+</body>
+</html>

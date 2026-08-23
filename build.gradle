@@ -1,0 +1,8 @@
+// 根 build.gradle（项目级）
+// 作用：定义所有子模块共用的仓库与 Gradle 插件版本（projects 块已在新版 AGP 中弃用，这里只放插件版本声明）
+plugins {
+    // Android Gradle 插件版本：8.5.2（稳定，兼容 JDK 17 与 Android 14 编译）
+    id 'com.android.application' version '8.5.2' apply false
+    // Kotlin 插件版本：1.9.24（与 AGP 8.5 兼容）
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+}

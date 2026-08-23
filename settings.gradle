@@ -1,0 +1,22 @@
+// settings.gradle
+// 作用：声明本工程包含的唯一模块 app（标准 Android 单模块工程结构）
+// 注意：仓库来源统一用 google() + mavenCentral()，保证国内 GitHub Actions 能拉到依赖
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// 工程根名称（纯英文，避免中文路径导致的编译问题）
+rootProject.name = "HiddenDictationApp"
+// 包含的应用模块；所有业务代码都在这个模块里
+include(":app")

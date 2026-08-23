@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用名称（仅用于设置/无障碍列表里显示，桌面无图标） -->
+    <string name="app_name">手写听写守护</string>
+    <!-- 前台服务通知内容（最低优先级、静音） -->
+    <string name="foreground_notification_title">后台听写计时服务</string>
+    <string name="foreground_notification_text">计时保活中（静音通知）</string>
+    <!-- 权限引导提示文案 -->
+    <string name="perm_guide_title">请授予必要权限</string>
+    <string name="perm_guide_body">本应用需要以下权限才能正常工作：\n1. 悬浮窗\n2. 忽略电池优化\n3. 后台活动\n4. 无障碍服务\n\n缺少任一权限将持续提醒。</string>
+    <!-- 极限省电提示 -->
+    <string name="extreme_power_hint">检测到已开启极限/超级省电模式，系统会强制停止本应用，请关闭该模式以恢复听写计时。</string>
+</resources>
