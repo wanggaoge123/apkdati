@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.accessibility.AccessibilityEvent
 import com.hidden.dictation.receiver.WatchdogReceiver
+import com.hidden.dictation.ui.PermissionGuideActivity
 
 /**
  * FloatAccessibilityService —— 无障碍服务（需求一.3 / 三.1 方案2）
