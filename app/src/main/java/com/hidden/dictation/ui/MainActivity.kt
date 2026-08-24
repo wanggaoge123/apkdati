@@ -14,7 +14,6 @@ import com.hidden.dictation.R
 import com.hidden.dictation.service.FloatWindowManager
 import com.hidden.dictation.service.MainService
 import com.hidden.dictation.service.GuardService
-import com.hidden.dictation.service.ScreenTimeTracker
 
 /**
  * MainActivity —— 带"开启按钮"的主界面（2026-08-24 新增，需求：有界面、开启后才运行）
@@ -37,6 +36,13 @@ class MainActivity : AppCompatActivity() {
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("dictation_config", Context.MODE_PRIVATE)
     }
+
+    /**
+     * 首次延迟（分钟）：与 ScreenTimeTracker.DEFAULT_FIRST_DELAY_MIN 保持一致。
+     * 用于主界面本地倒计时显示（不再依赖子进程 :main 的 ScreenTimeTrackerHolder 单例，
+     * 因为 object 单例跨进程不共享，主进程永远读不到子进程注入的计时器 → 之前一直显示 0:0）。
+     */
+    private val FIRST_DELAY_MIN = 2
 
     // 主线程 Handler，用于每秒刷新倒计时
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -97,12 +103,15 @@ class MainActivity : AppCompatActivity() {
     private fun startServices() {
         // 先写"用户已开启"标记，状态立即切到"运行中"（避免服务 onCreate 未完成时按钮误判为未启动）
         prefs.edit().putBoolean("user_started", true).apply()
+        // 记录开启时刻，供主界面本地倒计时（跨进程单例不共享，故用本进程时间戳）
+        prefs.edit().putLong("svc_start_ts", System.currentTimeMillis()).apply()
         try {
             val i = Intent(this, MainService::class.java)
             startForegroundService(i)
         } catch (e: Exception) {
             // 启动失败（如 Android 版本异常）：回退标记并提示
             prefs.edit().putBoolean("user_started", false).apply()
+            prefs.edit().putLong("svc_start_ts", 0L).apply()
             android.widget.Toast.makeText(this, "启动失败：${e.message}", android.widget.Toast.LENGTH_LONG).show()
         }
         try {
@@ -117,6 +126,7 @@ class MainActivity : AppCompatActivity() {
         try { stopService(Intent(this, GuardService::class.java)) } catch (_: Exception) {}
         FloatWindowManager.destroy()
         prefs.edit().putBoolean("user_started", false).apply()
+        prefs.edit().putLong("svc_start_ts", 0L).apply()
     }
 
     /**
@@ -135,14 +145,22 @@ class MainActivity : AppCompatActivity() {
         if (running) {
             tvStatus.text = getString(R.string.status_running)
             btnToggle.text = getString(R.string.btn_stop)
-            // 显示距离下次弹窗剩余时间（tracker 未就绪时显示为"初始化中"）
-            val leftMs = try {
-                if (FloatWindowManager.ScreenTimeTrackerHolder.isInitialized())
-                    FloatWindowManager.ScreenTimeTrackerHolder.tracker.getRemainingMs()
-                else 0L
-            } catch (_: Exception) { 0L }
-            val sec = (leftMs / 1000).toInt()
-            tvNext.text = getString(R.string.next_hint_running, sec / 60, sec % 60)
+            // 本地倒计时：从开启时刻 wall-clock 计算剩余（跨进程单例不共享，故不读子进程 tracker）。
+            // 注：子进程 :main 内的 ScreenTimeTracker 按"亮屏累计"真实触发弹窗，与这里显示近似一致。
+            val startTs = prefs.getLong("svc_start_ts", 0L)
+            val targetMs = FIRST_DELAY_MIN * 60_000L
+            val leftMs = if (startTs > 0) {
+                (targetMs - (System.currentTimeMillis() - startTs)).coerceAtLeast(0L)
+            } else {
+                targetMs
+            }
+            if (leftMs <= 0) {
+                // 已到时：提示即将弹出（保持亮屏，子进程累计若因息屏略慢会稍后触发）
+                tvNext.text = "已到时，听写窗即将弹出（请保持屏幕亮着）"
+            } else {
+                val sec = (leftMs / 1000).toInt()
+                tvNext.text = getString(R.string.next_hint_running, sec / 60, sec % 60)
+            }
         } else {
             tvStatus.text = getString(R.string.status_stopped)
             btnToggle.text = getString(R.string.btn_start)

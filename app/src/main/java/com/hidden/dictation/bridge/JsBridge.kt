@@ -39,8 +39,10 @@ class JsBridge(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** 注入题库到前端 window.WORD_LIST（需求四.3：词库由 Room 提供） */
-    fun injectWordList() {
+    fun injectWordList(onInjected: (() -> Unit)? = null) {
         scope.launch {
+            // 前置保证词库非空：无论主服务是否启动，弹窗前都先确保种子已写入（解决"弹窗空白=空词库"）
+            try { repo.ensureSeed() } catch (_: Exception) {}
             val list = repo.getWordListForFrontend()
             val arr = JSONArray()
             list.forEach { m ->
@@ -50,7 +52,22 @@ class JsBridge(
                 arr.put(o)
             }
             val js = "window.WORD_LIST = $arr; window.IS_RANDOM_MODE = true;"
-            webView.post { webView.evaluateJavascript(js, null) }
+            webView.post {
+                webView.evaluateJavascript(js, null)
+                onInjected?.invoke()
+            }
+        }
+    }
+
+    /**
+     * 注入词库并唤起弹窗：先写入最新题库，注入完成（evaluateJavascript 已 post）后
+     * 再调用 WritingCore.open()，彻底消除"open 先于词库注入执行导致空白"的竞态。
+     */
+    fun injectWordListAndOpen() {
+        injectWordList {
+            webView.post {
+                webView.evaluateJavascript("if(window.WritingCore) WritingCore.open();", null)
+            }
         }
     }
 

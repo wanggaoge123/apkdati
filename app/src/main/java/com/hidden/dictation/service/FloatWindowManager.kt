@@ -92,9 +92,9 @@ object FloatWindowManager {
     /** 计时达标 → 请求打开听写弹窗（需求三.1 唤起） */
     fun requestOpen(context: Context) {
         if (webView == null) init(context)
-        // 先注入最新题库
-        jsBridge?.injectWordList()
-        // 显示悬浮窗（仅方案1：SYSTEM_ALERT_WINDOW）
+        // 默认锁死，答对才解锁（需求三.2）
+        jsBridge?.markWrongLock()
+        // 先显示悬浮窗（仅方案1：SYSTEM_ALERT_WINDOW），再注入词库并唤起弹窗
         try {
             if (webView?.windowToken == null && floatParams != null) {
                 wm?.addView(webView, floatParams)
@@ -102,9 +102,8 @@ object FloatWindowManager {
         } catch (_: Exception) {
             // 悬浮窗失败（例如权限被临时收回）：本次不弹，等下次计时达标再试
         }
-        // 通知前端唤起弹窗
-        jsBridge?.markWrongLock() // 默认锁死，答对才解锁
-        jsBridge?.openDictation()
+        // 注入词库 + 唤起弹窗（注入完成后再 open，消除竞态，避免空白）
+        jsBridge?.injectWordListAndOpen()
     }
 
     /**

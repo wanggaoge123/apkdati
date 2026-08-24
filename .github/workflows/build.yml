@@ -61,6 +61,31 @@ jobs:
       - name: 赋予 gradlew 执行权限
         run: chmod +x ./gradlew
 
+      # 5.5) 把 HanziWriter 库本地化进 APK（彻底去掉对 jsdelivr CDN 的网络依赖，
+      #      国内网络常被墙导致手写库加载失败、弹窗空白或秒关）。CI runner 有网，
+      #      多源 fallback 下载到 assets，APK 安装后离线也能渲染田字格。
+      - name: 下载 HanziWriter 库到 assets（本地化）
+        run: |
+          DEST=app/src/main/assets/hanzi-writer.min.js
+          # 多源 fallback：任一可用即可
+          for url in \
+            "https://cdn.jsdelivr.net/npm/hanzi-writer@3/dist/hanzi-writer.min.js" \
+            "https://unpkg.com/hanzi-writer@3/dist/hanzi-writer.min.js" \
+            "https://cdnjs.cloudflare.com/ajax/libs/hanzi-writer/3.0.0/dist/hanzi-writer.min.js" ; do
+            echo "尝试下载: $url"
+            if curl -fsSL --retry 3 --connect-timeout 20 "$url" -o "$DEST" ; then
+              echo "下载成功: $url"
+              break
+            fi
+          done
+          if [ -s "$DEST" ]; then
+            echo "HanziWriter 库大小: $(wc -c < "$DEST") 字节"
+          else
+            echo "::warning::HanziWriter 下载失败，弹窗将走离线降级（仍可显示要写的字，只是无描红轨迹）"
+            # 写一个最小占位，避免 index.html 引用 404（实际功能由前端离线降级兜底）
+            echo "/* HanziWriter 离线占位：CI 下载失败，前端已做降级处理 */" > "$DEST"
+          fi
+
       # 6) 编译 release APK（自动使用上方生成的签名）
       - name: 编译 assembleRelease
         run: ./gradlew assembleRelease --no-daemon

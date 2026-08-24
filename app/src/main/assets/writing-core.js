@@ -79,9 +79,11 @@
 
   /* ---------- 打开宝箱 ---------- */
   function open() {
-    if (typeof HanziWriter === 'undefined') {
-      dom.status.textContent = '⚠ 手写库未加载（需联网首次运行），已直接发放奖励';
-      finish(true); return;   // 离线兜底
+    var offline = (typeof HanziWriter === 'undefined');
+    if (offline) {
+      // 离线降级：不再直接发奖关闭，而是正常显示"要写的字"，让用户手写；
+      // 提交时 charPass 在 stdReady=false 时直接判对（见 charPass），实现离线宽松判定。
+      dom.status.textContent = '⚠ 手写库未加载（离线模式）：请凭空写出下面的字，写完点「提交」';
     }
     hwChestOpen = true;
     hwPenaltyMode = false;
@@ -98,7 +100,16 @@
       if (dom.status) dom.status.textContent = '请在每个格子里写出对应的字，写完点「提交」';
     } else {
       hwChars = [(hwCurrent.hanzi || '天').charAt(0)];
-      if (dom.cell) dom.cell.style.display = 'block';
+      if (dom.cell) {
+        // 离线降级（无 HanziWriter）时保持 flex 居中显示"要写的字"，不要强制 block
+        if (typeof HanziWriter === 'undefined') {
+          dom.cell.style.display = 'flex';
+          dom.cell.style.alignItems = 'center';
+          dom.cell.style.justifyContent = 'center';
+        } else {
+          dom.cell.style.display = 'block';
+        }
+      }
       if (dom.grid) dom.grid.style.display = 'none';
       if (dom.status) dom.status.textContent = '请在田字格里写出：' + hwCurrent.pinyin;
     }
@@ -141,6 +152,19 @@
     if (!ch) return;
     var rect = cell.getBoundingClientRect();
     var size = Math.max(120, Math.min(240, Math.floor((rect.width || 200) - 10)));
+    // 离线降级：HanziWriter 不可用时，不创建 SVG 轨迹，仅在格内显示"要写的字"文字，
+    // 用户凭空手写、提交时按离线宽松判定（charPass 在 stdReady=false 时返回 true）。
+    if (typeof HanziWriter === 'undefined') {
+      cell.textContent = ch;
+      cell.style.display = 'flex';
+      cell.style.alignItems = 'center';
+      cell.style.justifyContent = 'center';
+      cell.style.fontSize = (size * 0.6) + 'px';
+      cell.style.color = '#333';
+      var st0 = { userStrokes: [], stdReady: false };
+      hwStats[i] = st0;
+      return;
+    }
     var writer = HanziWriter.create(cell, ch, {
       width: size, height: size, padding: 10,
       showCharacter: false, showOutline: false,

@@ -47,19 +47,24 @@ class MainService : Service() {
         // 2) 初始化仓库（Room，轻量，放前台之后避免阻塞前台调用）
         repo = DictationRepository.get(this)
 
-        // 3) 初始化计时器，达标后唤起弹窗（通过悬浮窗管理器）
-        tracker = ScreenTimeTracker(this) {
-            onTriggerReached()
+        // 3) 初始化计时器，达标后唤起弹窗（通过悬浮窗管理器）。
+        //    用 try 包裹：即使后续某步异常，计时器也应尽量启动（触发弹窗依赖它）。
+        try {
+            tracker = ScreenTimeTracker(this) {
+                onTriggerReached()
+            }
+            // 把计时器交给 FloatWindowManager 持有，便于答对后重置（需求三.2）
+            FloatWindowManager.ScreenTimeTrackerHolder.tracker = tracker
+            tracker.start()
+        } catch (e: Exception) {
+            android.util.Log.e("MainService", "计时器初始化失败：${e.message}")
         }
-        // 把计时器交给 FloatWindowManager 持有，便于答对后重置（需求三.2）
-        FloatWindowManager.ScreenTimeTrackerHolder.tracker = tracker
-        tracker.start()
 
         // 4) 拉起守护进程（双向守护）
         startGuardProcess()
 
-        // 5) 数据种子
-        scope.launch { repo.ensureSeed() }
+        // 5) 数据种子（异步，不阻塞 onCreate；前端弹窗时也会 ensureSeed 兜底）
+        scope.launch { try { repo.ensureSeed() } catch (_: Exception) {} }
     }
 
     /** 计时达标：通过悬浮窗管理器唤起听写弹窗（方案1：SYSTEM_ALERT_WINDOW） */

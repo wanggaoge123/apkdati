@@ -4,8 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>手写听写</title>
-  <!-- 指南代码块②：HanziWriter CDN（联网加载标准笔画；离线时 writing-core 自动兜底发奖） -->
-  <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3/dist/hanzi-writer.min.js"></script>
+  <!-- HanziWriter 已本地化进 APK（构建时由 CI 下载到 assets），不再依赖网络。
+       离线也能渲染田字格；若极少数情况库缺失，writing-core.js 会降级显示要写的字。 -->
+  <script src="hanzi-writer.min.js"></script>
   <style>
     /* 指南代码块④：弹窗 + 田字格样式（原样） */
     #hw-modal {
