@@ -15,8 +15,6 @@ import android.widget.FrameLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.hidden.dictation.R
-import com.hidden.dictation.service.MainService
-import com.hidden.dictation.service.GuardService
 
 /**
  * PermissionGuideActivity —— 4 项必备权限引导（需求二.4）
@@ -25,15 +23,16 @@ import com.hidden.dictation.service.GuardService
  *  1) 悬浮窗权限 SYSTEM_ALERT_WINDOW
  *  2) 忽略电池优化 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
  *  3) 后台活动权限（不同厂商叫法不同，引导到"自启动/后台管理"设置页）
- *  4) 无障碍权限（开启本 APP 的无障碍服务）
+ *  4) 无障碍权限（开启本 APP 的无障碍服务，仅作保活辅助）
  *
- * 透明主题 Activity，不暴露"主界面"，仅作为权限引导弹窗（需求一.3）。
+ * 2026-08-24 改造：从"首次一次性引导"改为"可从主界面重复进入的权限设置页"。
+ *  - 不再用 guide_done 决定是否弹引导；进入即逐个检查，缺哪个引导哪个；
+ *  - 全部满足后显示"已全部完成"，点确定返回主界面；
+ *  - 透明主题（不破坏主界面的视觉一致性，作为弹窗式设置页）。
  *
- * 关键稳定性修复（解决桌面点击闪退/无反应）：
- *  - 透明主题 Activity 从桌面启动必须有 content view，否则 onResume 后系统报
- *    "content view not yet created" 直接崩溃；这里 setContentView 一个透明 FrameLayout。
- *  - AlertDialog 必须在窗口 attach 之后再 show，否则 Android 10+ 抛 BadTokenException 闪退；
- *    这里统一用 Handler.post 延迟到下一帧窗口就绪后再弹。
+ * 稳定性修复（避免闪退）：
+ *  - 透明主题 Activity 必须有 content view（setContentView 透明 FrameLayout）；
+ *  - AlertDialog 用 Handler.post 延迟到窗口就绪后再 show，避免 BadTokenException。
  */
 class PermissionGuideActivity : AppCompatActivity() {
 
@@ -41,7 +40,6 @@ class PermissionGuideActivity : AppCompatActivity() {
     private val pending = mutableListOf<PermissionItem>()
     private var currentIndex = 0
 
-    // 记录"引导是否已全部完成"，完成后再次打开只提示、不重复弹（避免暴露主界面）
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("dictation_prefs", Context.MODE_PRIVATE)
     }
@@ -57,33 +55,19 @@ class PermissionGuideActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 必须有 content view，否则透明主题 Activity 从桌面启动会崩溃（闪退根因之一）
+        // 必须有 content view，否则透明主题 Activity 从桌面/界面启动会崩溃
         setContentView(FrameLayout(this))
         buildQueue()
-        // 若已经完成过首次引导，提示后关闭（不重复弹、不暴露界面）
-        if (prefs.getBoolean("guide_done", false)) {
-            uiHandler.post {
-                AlertDialog.Builder(this)
-                    .setTitle(R.string.perm_guide_title)
-                    .setMessage("权限已配置完成，后台听写服务运行中。如需重新设置，可在系统设置中调整相关权限。")
-                    .setCancelable(false)
-                    .setPositiveButton("知道了") { _, _ -> finish() }
-                    .show()
-            }
-            return
-        }
         // 恢复上次引导到的权限项（跳转设置页后本 Activity 会被销毁，靠 prefs 续上）
         currentIndex = prefs.getInt("guide_index", 0)
-        // 推迟到窗口就绪后再弹引导，避免 dialog show 时 window token 未就绪导致闪退
+        // 推迟到窗口就绪后再弹引导
         uiHandler.post { showCurrent() }
     }
 
     override fun onResume() {
         super.onResume()
         // 从设置页返回后，onResume 会再次触发：重新校验当前项是否已满足
-        if (!prefs.getBoolean("guide_done", false)) {
-            uiHandler.post { showCurrent() }
-        }
+        uiHandler.post { showCurrent() }
     }
 
     private fun buildQueue() {
@@ -119,7 +103,7 @@ class PermissionGuideActivity : AppCompatActivity() {
                 }
             )
         )
-        // 3 无障碍（用于自启+兜底绘制）
+        // 3 无障碍（仅作保活辅助）
         pending.add(
             PermissionItem(
                 name = "无障碍服务",
@@ -136,7 +120,6 @@ class PermissionGuideActivity : AppCompatActivity() {
                 // 该项无标准检测 API，靠用户确认；仍弹一次引导，不静默跳过
                 checker = { true },
                 launcher = {
-                    // 跳到应用详情页，用户手动在厂商设置里开启自启动/后台管理
                     val i = Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.parse("package:$packageName")
@@ -156,23 +139,22 @@ class PermissionGuideActivity : AppCompatActivity() {
     /**
      * 弹出"当前权限项"的引导框（非递归，单次）。
      * - 当前项已满足 → 推进到下一项并持久化，重新弹下一项；
-     * - 当前项未满足 → 弹引导框，点"前往设置"后跳系统设置页（本 Activity 会被销毁，
-     *   返回后 onCreate/onResume 重新驱动 showCurrent，从 prefs 续上进度）；
-     * - 全部完成 → 记录 guide_done、拉起后台服务、finish。
+     * - 当前项未满足 → 弹引导框，点"前往设置"后跳系统设置页（本 Activity 销毁，返回时从 prefs 续上）；
+     * - 全部完成 → 显示"已全部完成"，点确定 finish 回主界面。
      */
     private fun showCurrent() {
         // 防御：窗口已被销毁则不操作
         if (isFinishing || isDestroyed) return
 
         if (currentIndex >= pending.size) {
-            prefs.edit().putBoolean("guide_done", true).apply()
-            try {
-                startForegroundService(Intent(this, MainService::class.java))
-            } catch (_: Exception) {}
-            try {
-                startForegroundService(Intent(this, GuardService::class.java))
-            } catch (_: Exception) {}
-            finish()
+            // 全部完成
+            prefs.edit().putInt("guide_index", 0).apply()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.perm_guide_title)
+                .setMessage("所需权限已全部授予，后台听写弹窗可正常在游戏/应用上层显示。")
+                .setCancelable(false)
+                .setPositiveButton("完成") { _, _ -> finish() }
+                .show()
             return
         }
 

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MainActivity 主界面布局（2026-08-24 新增）
+  功能：
+    1) 顶部显示服务运行状态（运行中 / 已停止）
+    2) 中部大按钮：开启 / 停止（点开启才拉起后台服务，点停止才关）
+    3) 状态行：距离下次听写弹窗还有多久
+    4) "权限设置"入口按钮：跳转 4 项权限引导
+    5) 底部"其他功能"占位区：后续新增功能从这里扩展
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@android:color/white">
+
+    <!-- 标题 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 运行状态卡片 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="#F2F2F2"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:id="@+id/tv_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/status_stopped"
+            android:textSize="16sp"
+            android:textColor="#333333" />
+
+        <TextView
+            android:id="@+id/tv_next"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/next_hint_idle"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+
+    <!-- 开启 / 停止 主按钮 -->
+    <Button
+        android:id="@+id/btn_toggle"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/btn_start"
+        android:textSize="18sp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- 权限设置入口 -->
+    <Button
+        android:id="@+id/btn_permissions"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="@string/btn_permissions"
+        android:textSize="15sp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- 其他功能占位区（后续新增功能从这里扩展） -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/section_other"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/other_placeholder"
+        android:textSize="13sp"
+        android:textColor="#999999" />
+
+</LinearLayout>

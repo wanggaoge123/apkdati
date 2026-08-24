@@ -1,13 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 应用名称（仅用于设置/无障碍列表里显示，桌面无图标） -->
+    <!-- 应用名称（桌面图标 + 设置/无障碍列表显示） -->
     <string name="app_name">手写听写守护</string>
+
     <!-- 前台服务通知内容（最低优先级、静音） -->
     <string name="foreground_notification_title">后台听写计时服务</string>
     <string name="foreground_notification_text">计时保活中（静音通知）</string>
+
     <!-- 权限引导提示文案 -->
     <string name="perm_guide_title">请授予必要权限</string>
     <string name="perm_guide_body">本应用需要以下权限才能正常工作：\n1. 悬浮窗\n2. 忽略电池优化\n3. 后台活动\n4. 无障碍服务\n\n缺少任一权限将持续提醒。</string>
+
     <!-- 极限省电提示 -->
     <string name="extreme_power_hint">检测到已开启极限/超级省电模式，系统会强制停止本应用，请关闭该模式以恢复听写计时。</string>
+
+    <!-- 无障碍服务描述（设置里显示） -->
+    <string name="accessibility_desc">手写听写守护的辅助服务，用于在被系统回收时辅助拉起后台计时服务。仅作保活用途，不会读取屏幕内容或拦截按键。</string>
+
+    <!-- ===== 主界面字符串（2026-08-24 新增） ===== -->
+    <!-- 运行状态 -->
+    <string name="status_running">● 服务运行中</string>
+    <string name="status_stopped">○ 服务已停止（点下方按钮开启）</string>
+    <!-- 距离下次弹窗提示 -->
+    <string name="next_hint_running">距离下次听写弹窗：%1$d 分 %2$d 秒</string>
+    <string name="next_hint_idle">服务未开启，暂不弹窗</string>
+    <!-- 主按钮 -->
+    <string name="btn_start">开启</string>
+    <string name="btn_stop">停止</string>
+    <!-- 权限设置入口 -->
+    <string name="btn_permissions">权限设置（悬浮窗 / 电池 / 无障碍 / 后台）</string>
+    <!-- 其他功能占位 -->
+    <string name="section_other">其他功能</string>
+    <string name="other_placeholder">（此处可后续新增功能，例如：词库管理、统计报表、定时开关等）</string>
 </resources>

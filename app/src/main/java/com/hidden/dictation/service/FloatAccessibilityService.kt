@@ -2,89 +2,47 @@ package com.hidden.dictation.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.view.accessibility.AccessibilityEvent
 import com.hidden.dictation.receiver.WatchdogReceiver
-import com.hidden.dictation.ui.PermissionGuideActivity
 
 /**
- * FloatAccessibilityService —— 无障碍服务（需求一.3 / 三.1 方案2）
+ * FloatAccessibilityService —— 无障碍服务（仅作"保活辅助"，需求二.2 补充）
  *
- * 双作用：
- *  1) 作为隐身 APP 的"启动入口"：用户开启无障碍后，系统回调 onServiceConnected，
- *     在这里拉起主服务 MainService 与守护进程（需求一.3：无桌面图标，靠无障碍自启）。
- *  2) 方案2 兜底绘制：当 SYSTEM_ALERT_WINDOW 悬浮窗失效（被系统/定制 UI 限制）时，
- *     由本服务用"顶层绘制视图"弹出听写窗（需求三.1 方案2）。
- *
- * 注意：onAccessibilityEvent 不处理具体事件，仅保持服务存活。
+ * 重要变更（2026-08-24）：
+ *  - 去掉了 canRetrieveWindowContent 与 FLAG_REQUEST_FILTER_KEY_EVENTS。
+ *    这两个 flag 在小米/MIUI 等定制 ROM 上会触发"过度获取隐私"判定，
+ *    导致无障碍服务即使开关显示已开启，系统也实际不让它生效（根因：开了没用、重启再开也没用）。
+ *  - 不再作为 APP 的启动入口，也不再负责绘制悬浮窗（方案2 兜底已废弃）。
+ *  - 现在的唯一作用：APP 被系统杀死后，借助无障碍的"服务存活"特性由 Watchdog 辅助拉回主服务。
+ *    即便该服务在个别机型上仍不生效，主服务 + 双进程守护 + SYSTEM_ALERT_WINDOW 悬浮窗也能独立运行。
  */
 class FloatAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        // 配置：全局事件、可检索窗口内容（用于兜底绘制坐标）
+        // 极简配置：仅监听"全局事件"用于保活，不取窗口内容、不拦截按键（避开 MIUI 隐私拦截）
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = (AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-                    or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS)
+            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             notificationTimeout = 100
         }
-        // 无障碍已启用 → 拉起主服务与守护（启动整套后台）
-        val ctx = this
-        try {
-            val i = Intent(ctx, MainService::class.java)
-            startForegroundService(i)
-        } catch (_: Exception) {}
-        try {
-            val g = Intent(ctx, GuardService::class.java)
-            startForegroundService(g)
-        } catch (_: Exception) {}
-
-        // 初始化浮动窗（方案2 兜底绘制）：把 WebView 挂到无障碍窗口
-        FloatWindowManager.init(ctx, this)
-        FloatWindowManager.attachToA11yWindow(this)
-
-        // 注册方案2 切换广播（当方案1 悬浮窗失效时，由 FloatWindowManager 发来）
-        val filter = IntentFilter("com.hidden.dictation.USE_A11Y_FLOAT")
-        registerReceiver(a11yFloatReceiver, filter)
-
-        // 通知 WatchdogReceiver：无障碍已就绪，可取消"缺少无障碍"提示
+        // 通知 WatchdogReceiver：无障碍已就绪（仅用于记录状态，不依赖它启动任何东西）
         sendBroadcast(Intent(WatchdogReceiver.ACTION_ACCESSIBILITY_READY))
-
-        // 兜底拉起权限引导（带 NEW_TASK，否则 AccessibilityService 内 startActivity 会抛异常）：
-        // 用户开启无障碍后，若尚未完成 4 项权限引导，自动弹出引导界面。
-        try {
-            val pi = Intent(ctx, PermissionGuideActivity::class.java)
-            pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            ctx.startActivity(pi)
-        } catch (_: Exception) {}
-    }
-
-    /** 方案2 切换接收者：收到后把 WebView 挂到本无障碍窗口 */
-    private val a11yFloatReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.hidden.dictation.USE_A11Y_FLOAT") {
-                FloatWindowManager.attachToA11yWindow(this@FloatAccessibilityService)
-            }
-        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // 无需处理具体事件；保持存活即可。
-        // 若需要"实时监听某个弹窗被遮挡"，可在此扩展。
+        // 无需处理具体事件；保持服务存活即可（被系统回收时 onInterrupt 会通知 Watchdog 重拉主服务）
     }
 
     override fun onInterrupt() {
-        // 被系统中断时尝试自我恢复（通过 Watchdog 再拉）
+        // 被系统中断：发出广播，由 Watchdog 尝试重拉主服务/守护进程
         sendBroadcast(Intent("com.hidden.dictation.WATCHDOG_TICK"))
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        // 无障碍被用户关闭：发出广播，上层开始循环弹"请重新开启无障碍"提示
+        // 无障碍被用户关闭：发出广播，上层可记录"缺少无障碍"状态（但不强制弹窗，因已有双进程守护兜底）
         sendBroadcast(Intent(WatchdogReceiver.ACTION_ACCESSIBILITY_LOST))
         return false
     }

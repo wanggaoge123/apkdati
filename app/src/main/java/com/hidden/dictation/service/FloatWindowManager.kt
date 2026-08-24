@@ -1,6 +1,5 @@
 package com.hidden.dictation.service
 
-import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
@@ -14,11 +13,12 @@ import com.hidden.dictation.bridge.JsBridge
 import com.hidden.dictation.db.DictationRepository
 
 /**
- * FloatWindowManager —— 双方案悬浮听写弹窗（需求三.1）
+ * FloatWindowManager —— 悬浮听写弹窗（方案1：SYSTEM_ALERT_WINDOW，需求三.1）
  *
- * 方案1（基础）：SYSTEM_ALERT_WINDOW 系统悬浮窗，内嵌 WebView 加载 assets/index.html（听写页）；
- * 方案2（兜底）：当悬浮窗权限失效或被定制 UI 限制时，由 FloatAccessibilityService
- *              用"A11y 顶层绘制视图"渲染同一 WebView（无障碍服务可绘制于所有应用之上）。
+ * 重要变更（2026-08-24）：
+ *  - 废弃了"方案2 无障碍兜底绘制"。原因：无障碍窗口绘制 WebView 在小米等定制 ROM 上不稳定，
+ *    且原无障碍服务因 flag 问题在 MIUI 实际不生效，反而拖累整体。
+ *  - 现在只走 SYSTEM_ALERT_WINDOW 系统悬浮窗，逻辑更简单、更可控。
  *
  * 弹窗锁死逻辑（需求三.2，严格执行）：
  *  - 手写识别错误 → 弹窗无法关闭、无法拖动隐藏、无法切页面绕过（allowClose=false，且不响应关闭）；
@@ -34,14 +34,11 @@ object FloatWindowManager {
     private var wm: WindowManager? = null
     private var floatParams: WindowManager.LayoutParams? = null
 
-    // 是否正用方案2（无障碍兜底）绘制
-    private var usingA11yFallback = false
-
     /**
      * 初始化：创建 WebView 并加载 assets 听写页，注入 JS 桥。
-     * @param a11yService 若为非 null，则使用方案2（无障碍绘制），否则方案1（悬浮窗）。
+     * 注意：必须在已获得 SYSTEM_ALERT_WINDOW 权限后调用（否则 addView 会抛异常）。
      */
-    fun init(context: Context, a11yService: AccessibilityService? = null) {
+    fun init(context: Context) {
         repo = DictationRepository.get(context)
         wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
@@ -65,9 +62,7 @@ object FloatWindowManager {
             onNeedResetTimer = { ScreenTimeTrackerHolder.reset() },
             onWrongLocked = { /* 锁死：不关闭，allowClose 已置 false */ }
         )
-        // 局部不可变引用，避免对可变属性 jsBridge 做智能转换失败（Kotlin 编译器限制）
-        val bridge = jsBridge!!
-        webView?.addJavascriptInterface(bridge, "AndroidBridge")
+        webView?.addJavascriptInterface(jsBridge!!, "AndroidBridge")
 
         // 加载 assets 听写页（复用指南的 writing-core.js + 统一弹窗 HTML/CSS）
         webView?.loadUrl("file:///android_asset/index.html")
@@ -89,51 +84,27 @@ object FloatWindowManager {
         ).apply {
             gravity = Gravity.CENTER
         }
-
-        usingA11yFallback = (a11yService != null)
     }
+
+    /** 是否已初始化（WebView 已创建） */
+    fun isInitialized(): Boolean = webView != null
 
     /** 计时达标 → 请求打开听写弹窗（需求三.1 唤起） */
     fun requestOpen(context: Context) {
         if (webView == null) init(context)
         // 先注入最新题库
         jsBridge?.injectWordList()
-        // 显示悬浮窗（方案1）或由无障碍绘制（方案2）
-        if (usingA11yFallback) {
-            // 方案2：由 FloatAccessibilityService 在其 window 上 addView（见下方 attachToA11y）
-        } else {
-            try {
-                if (webView?.windowToken == null && floatParams != null) {
-                    wm?.addView(webView, floatParams)
-                }
-            } catch (_: Exception) {
-                // 悬浮窗失败 → 切换到方案2（无障碍兜底）
-                switchToA11yFallback(context)
+        // 显示悬浮窗（仅方案1：SYSTEM_ALERT_WINDOW）
+        try {
+            if (webView?.windowToken == null && floatParams != null) {
+                wm?.addView(webView, floatParams)
             }
+        } catch (_: Exception) {
+            // 悬浮窗失败（例如权限被临时收回）：本次不弹，等下次计时达标再试
         }
         // 通知前端唤起弹窗
         jsBridge?.markWrongLock() // 默认锁死，答对才解锁
         jsBridge?.openDictation()
-    }
-
-    /** 方案1 失败 → 切换方案2（无障碍兜底绘制） */
-    private fun switchToA11yFallback(context: Context) {
-        usingA11yFallback = true
-        // 实际绘制需在 AccessibilityService 的 Service 上下文里 addView。
-        // 这里通过广播让 FloatAccessibilityService 接管（在它的 onServiceConnected/绘制逻辑里 attach）。
-        context.sendBroadcast(android.content.Intent("com.hidden.dictation.USE_A11Y_FLOAT"))
-    }
-
-    /** 由 AccessibilityService 调用：把 WebView 挂到无障碍窗口（方案2） */
-    fun attachToA11yWindow(a11yService: AccessibilityService) {
-        usingA11yFallback = true
-        try {
-            if (webView?.windowToken == null && floatParams != null) {
-                // 注意：从 AccessibilityService 自身上下文取 WindowManager（API 正确，非 a11yService.windowManager）
-                val a11yWm = a11yService.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                a11yWm.addView(webView, floatParams)
-            }
-        } catch (_: Exception) {}
     }
 
     /**
@@ -170,5 +141,7 @@ object FloatWindowManager {
     object ScreenTimeTrackerHolder {
         lateinit var tracker: com.hidden.dictation.service.ScreenTimeTracker
         fun reset() { if (::tracker.isInitialized) tracker.reset() }
+        /** 计时器是否已初始化（供主界面判断服务是否真正运行） */
+        fun isInitialized(): Boolean = ::tracker.isInitialized
     }
 }

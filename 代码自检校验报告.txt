@@ -119,4 +119,67 @@ G) 弹窗逻辑：答错无关闭键、不移除视图→锁死；答对安卓�
 ✅ 5 处编译级/功能级缺陷已全部修复。
 ✅ 项目结构完整，可直接拖入 GitHub 桌面端推送，云端自动产出未签名 APK。
 （依据需求七："未完成自检不准输出最终代码" —— 本报告即为自检完成凭证。）
+
+
+================================================================
+      《代码自检校验报告》补充 —— 2026-08-24 改版
+      主题：无障碍失效修复 + 有界面主入口 + 2 分钟延迟弹窗
+================================================================
+
+【问题背景（用户实测反馈）】
+- 旧版：APP 无主界面，靠开启无障碍服务自启；无障碍开启后"服务无法使用"，
+  重启手机再开依旧无效 → 根因是 accessibility_config 里的 canRetrieveWindowContent
+  与 FLAG_REQUEST_FILTER_KEY_EVENTS 在小米/MIUI 触发隐私拦截，服务"显示开了实际不生效"。
+- 用户要求：要有界面、有开启按钮（开启后才运行）、亮屏累计 2 分钟后再弹窗。
+
+【本次变更清单】
+1) 无障碍服务降级为"可选保活辅助"
+   - FloatAccessibilityService 去掉 windowContent / filterKeyEvents，不再当启动入口、
+     不再绘制悬浮窗；仅 onServiceConnected 上报就绪，被杀时 onInterrupt 通知 Watchdog 重拉。
+   - accessibility_config.xml 同步精简（去掉 canRetrieveWindowContent、flagRequestFilterKeyEvents）。
+   文件：FloatAccessibilityService.kt、res/xml/accessibility_config.xml
+
+2) 新增带界面的主入口 MainActivity
+   - 正常主题 Theme.App + 桌面图标 + LAUNCHER；含状态显示、开启/停止按钮、
+     距离下次弹窗倒计时、权限设置入口、其他功能占位区。
+   - 点"开启"才 startForegroundService 拉起 MainService+GuardService；点"停止"才停。
+   - 新增布局 res/layout/activity_main.xml 与 Theme.App 主题。
+   文件：MainActivity.kt、res/layout/activity_main.xml、res/values/themes.xml、AndroidManifest.xml
+
+3) 权限引导改为可重复进入
+   - PermissionGuideActivity 去掉 guide_done 一次性逻辑，改为从主界面跳转、逐项检查可重复进入。
+   - 不再作为 LAUNCHER 入口，改为透明主题设置页。
+   文件：PermissionGuideActivity.kt、AndroidManifest.xml
+
+4) 悬浮窗去掉方案2（无障碍兜底绘制）
+   - FloatWindowManager 移除 usingA11yFallback / switchToA11yFallback / attachToA11yWindow
+     及 USE_A11Y_FLOAT 广播，仅保留 SYSTEM_ALERT_WINDOW 方案1。
+   文件：FloatWindowManager.kt（同步去除无障碍服务里的 attachToA11y 调用）
+
+5) 实现 2 分钟首次延迟弹窗
+   - ScreenTimeTracker 新增 firstPopupDone 与 firstDelayMs()（默认 2 分钟，KEY_FIRST_DELAY_MIN）；
+     开服务后先亮屏累计满 2 分钟才弹第一次，之后按 TRIGGER_MIN（默认 3 分钟）循环。
+   - 新增 getRemainingMs() 供主界面实时显示倒计时。
+   文件：ScreenTimeTracker.kt
+
+6) Watchdog 尊重用户停止意图
+   - WatchdogReceiver 自检/亮屏拉起前判断 user_started 标记，用户点"停止"后不再自启；
+   - 无障碍丢失不再强制弹引导（已降级为可选，不骚扰用户）。
+   文件：WatchdogReceiver.kt
+
+7) 字符串与教程同步
+   - strings.xml 新增主界面文案 + accessibility_desc；
+   - 上传与编译教程.txt 第五步改为"卸载旧版→装新版→进主界面→权限设置→点开启"流程。
+   文件：res/values/strings.xml、上传与编译教程.txt
+
+【编译风险自检】
+- 已搜索确认：所有对 FloatWindowManager.init(context,a11y)、attachToA11yWindow、
+  switchToA11yFallback、usingA11yFallback、USE_A11Y_FLOAT 的引用均已清除 ✔
+- MainActivity 对 ScreenTimeTrackerHolder.isInitialized() 改用封装方法，避免反射写法风险 ✔
+- Manifest 仅 MainActivity 持 LAUNCHER，PermissionGuideActivity exported=false 无 LAUNCHER ✔
+- themes.xml 新增 Theme.App 不透明主题，MainActivity 用其，规避 AppCompatActivity 主题崩溃 ✔
+
+【用户安装须知】
+- 务必先卸载旧版（无主界面那版）再装新版，避免旧 prefs（guide_done 等）残留导致界面判断错乱。
+- 新版无障碍"建议开但不强制"；悬浮窗与电池优化为必需，否则弹窗不显示。
 ================================================================

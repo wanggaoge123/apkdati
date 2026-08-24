@@ -27,12 +27,16 @@ class ScreenTimeTracker(
         val TRIGGER_MINUTES_OPTIONS = listOf(1, 2, 3, 5)
         const val PREFS = "dictation_config"
         const val KEY_TRIGGER_MIN = "trigger_min"
+        // 首次延迟（分钟）：服务开启后，亮屏累计达到该值才弹"第一次"听写窗（需求：开服务后先等2分钟）
+        const val KEY_FIRST_DELAY_MIN = "first_delay_min"
+        const val DEFAULT_FIRST_DELAY_MIN = 2
     }
 
     private var accumulatedMs = 0L          // 累计亮屏毫秒（不重置，跨越 APP 切换）
     private var lastTickTs = 0L             // 上次累加时间戳
     private var isScreenOn = true           // 当前屏幕状态
     private var running = false
+    private var firstPopupDone = false      // 是否已弹过"首次"听写窗
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tickerJob: Job? = null
@@ -61,16 +65,28 @@ class ScreenTimeTracker(
         }
     }
 
-    /** 当前触发阈值（分钟） */
+    /** 当前触发阈值（分钟，正常循环间隔） */
     private fun triggerMs(): Long {
         val min = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getInt(KEY_TRIGGER_MIN, 3)
         return min * 60_000L
     }
 
+    /** 首次延迟阈值（分钟）：开服务后先累计这么久才弹第一次 */
+    private fun firstDelayMs(): Long {
+        val min = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_FIRST_DELAY_MIN, DEFAULT_FIRST_DELAY_MIN)
+        return min * 60_000L
+    }
+
     fun setTriggerMinutes(min: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_TRIGGER_MIN, min).apply()
+    }
+
+    fun setFirstDelayMinutes(min: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_FIRST_DELAY_MIN, min).apply()
     }
 
     /** 启动计时（服务/无障碍启动时调用） */
@@ -98,8 +114,17 @@ class ScreenTimeTracker(
                     accumulatedMs += (now - lastTickTs)
                     lastTickTs = now
                 }
+                // 先判断"首次延迟"：开服务后先累计满 firstDelay 才弹第一次
+                if (!firstPopupDone) {
+                    if (accumulatedMs >= firstDelayMs()) {
+                        firstPopupDone = true
+                        accumulatedMs = 0L   // 首次达标后归零，进入正常循环间隔
+                        onThresholdReached()
+                    }
+                    continue   // 首次延迟未到，继续累加，不进入正常间隔判断
+                }
+                // 正常循环间隔
                 if (accumulatedMs >= triggerMs()) {
-                    // 达标：通知外部唤起弹窗，并重置累计（答对后由外部再确认重置，这里先归零重新计时）
                     accumulatedMs = 0L
                     onThresholdReached()
                 }
@@ -111,6 +136,17 @@ class ScreenTimeTracker(
     fun reset() {
         accumulatedMs = 0L
         lastTickTs = System.currentTimeMillis()
+    }
+
+    /**
+     * 取得"距离下次弹窗还剩多少毫秒"（供主界面实时显示）。
+     * - 首次延迟阶段：用 firstDelay 计算；
+     * - 正常循环：用 triggerMs 计算。
+     */
+    fun getRemainingMs(): Long {
+        val target = if (!firstPopupDone) firstDelayMs() else triggerMs()
+        val left = target - accumulatedMs
+        return if (left < 0) 0L else left
     }
 
     /** 取得当前累计（调试/扩展用） */

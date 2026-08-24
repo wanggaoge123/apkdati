@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 无障碍服务配置：声明本服务可"全局动作/顶层绘制"能力，用于方案2兜底弹窗 -->
+<!--
+  无障碍服务配置（2026-08-24 精简版）
+  说明：仅保留"保活辅助"所需的最小能力。
+  - 去掉了 canRetrieveWindowContent="true" 与 flagRequestFilterKeyEvents：
+    这两个在小米/MIUI 会触发隐私拦截，导致服务"显示已开启却实际无效"。
+  - 不再用于绘制悬浮窗（方案2 已废弃），仅由 Watchdog 在 APP 被杀时辅助拉回主服务。
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/app_name"
+    android:description="@string/accessibility_desc"
     android:accessibilityEventTypes="typeAllMask"
-    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagRequestFilterKeyEvents"
+    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:notificationTimeout="100"
-    android:canRetrieveWindowContent="true"
     android:settingsActivity="" />

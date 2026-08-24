@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
-import android.view.accessibility.AccessibilityManager
 import com.hidden.dictation.service.GuardService
 import com.hidden.dictation.service.MainService
 import com.hidden.dictation.ui.PermissionGuideActivity
@@ -34,51 +33,48 @@ class WatchdogReceiver : BroadcastReceiver() {
         when (intent?.action) {
             ACTION_WATCHDOG, ACTION_PULL_UP -> runSelfCheck(context)
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // 开机/更新后尝试拉起（Android 10+ 开机广播受限，仅作补充）
-                pullServices(context)
+                // 开机/更新后：仅当用户曾开启过才拉起（尊重用户停止意图）
+                if (isUserStarted(context)) pullServices(context)
             }
             Intent.ACTION_SCREEN_ON -> {
                 // 屏幕亮起：检查是否极限省电，若是提示
                 if (isExtremePowerMode(context)) {
-                    // 通过权限引导 Activity 弹出友好提示（需求二.6）
                     val i = Intent(context, PermissionGuideActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     context.startActivity(i)
                 }
-                // 每次亮屏也尝试拉起全套
-                pullServices(context)
+                // 每次亮屏也尝试拉起全套（仅当用户已开启）
+                if (isUserStarted(context)) pullServices(context)
             }
             ACTION_ACCESSIBILITY_LOST -> {
-                // 无障碍被关：循环触发引导，直到用户重新开启
-                val i = Intent(context, PermissionGuideActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(i)
+                // 无障碍被关：2026-08-24 起无障碍仅为可选保活辅助，
+                // 不再强制弹引导打扰用户；状态会在主界面体现。
             }
         }
     }
 
-    /** 自检：主服务/守护/无障碍任一缺失则拉起 */
+    /** 自检：仅当用户已开启服务时，主服务/守护被杀则重拉（不再强制要求无障碍） */
     private fun runSelfCheck(context: Context) {
+        if (!isUserStarted(context)) return   // 用户已停止则不自检拉起
         if (!isServiceRunning(context, MainService::class.java)) {
             pullMain(context)
         }
         if (!isServiceRunning(context, GuardService::class.java)) {
             pullGuard(context)
         }
-        if (!isAccessibilityEnabled(context)) {
-            // 无障碍未开启：触发引导（持续提醒，不静默）
-            val i = Intent(context, PermissionGuideActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(i)
-        }
+        // 注意：无障碍未开启不再强制弹引导（已降级为可选保活辅助）
     }
 
     private fun pullServices(context: Context) {
         pullMain(context)
         pullGuard(context)
+    }
+
+    /** 用户是否通过主界面点击过"开启"（持久标记，用于 Watchdog 尊重停止意图） */
+    private fun isUserStarted(context: Context): Boolean {
+        val prefs = context.getSharedPreferences("dictation_config", Context.MODE_PRIVATE)
+        return prefs.getBoolean("user_started", false)
     }
 
     private fun pullMain(context: Context) {
@@ -101,12 +97,6 @@ class WatchdogReceiver : BroadcastReceiver() {
             if (s.service.className == cls.name) return true
         }
         return false
-    }
-
-    private fun isAccessibilityEnabled(context: Context): Boolean {
-        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        return am.getEnabledAccessibilityServiceList(-1)
-            .any { it.resolveInfo.serviceInfo.packageName == context.packageName }
     }
 
     /** 极限/超级省电检测（需求二.6 友好提示） */
