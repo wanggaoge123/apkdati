@@ -69,6 +69,15 @@
         android:layout_height="48dp"
         android:text="@string/btn_permissions"
         android:textSize="15sp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- 立即测试弹窗：验证悬浮窗权限是否真能弹出（不等2分钟） -->
+    <Button
+        android:id="@+id/btn_test_pop"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="@string/btn_test_pop"
+        android:textSize="15sp"
         android:layout_marginBottom="24dp" />
 
     <!-- 其他功能占位区（后续新增功能从这里扩展） -->

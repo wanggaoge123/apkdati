@@ -29,6 +29,8 @@
     <string name="btn_stop">停止</string>
     <!-- 权限设置入口 -->
     <string name="btn_permissions">权限设置（悬浮窗 / 电池 / 无障碍 / 后台）</string>
+    <!-- 立即测试弹窗按钮 -->
+    <string name="btn_test_pop">立即测试弹窗（验证悬浮窗）</string>
     <!-- 其他功能占位 -->
     <string name="section_other">其他功能</string>
     <string name="other_placeholder">（此处可后续新增功能，例如：词库管理、统计报表、定时开关等）</string>

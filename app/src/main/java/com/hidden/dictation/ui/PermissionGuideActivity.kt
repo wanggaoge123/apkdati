@@ -168,9 +168,14 @@ class PermissionGuideActivity : AppCompatActivity() {
         }
 
         // 未满足：弹引导框（不静默、不可取消）
+        // 悬浮窗项额外提示小米/MIUI 的"后台弹出界面"开关（该开关独立于 SYSTEM_ALERT_WINDOW，
+        // 即使悬浮窗权限显示已开，若此处关着也弹不出窗）
+        val extraTip = if (item.name == "悬浮窗") {
+            "\n\n⚠ 小米/红米手机注意：除了这里授权，还要到 手机设置 → 应用设置 → 手写听写守护 → 其他权限/后台弹出界面，把"后台弹出界面"也打开，否则弹窗会被系统拦截。"
+        } else ""
         AlertDialog.Builder(this)
             .setTitle(R.string.perm_guide_title)
-            .setMessage("正在引导授予：${item.name}\n\n缺少该权限将导致听写弹窗无法在游戏上层显示或后台被杀死。请点击【前往设置】并在设置中允许，返回后继续。")
+            .setMessage("正在引导授予：${item.name}\n\n缺少该权限将导致听写弹窗无法在游戏上层显示或后台被杀死。请点击【前往设置】并在设置中允许，返回后继续。$extraTip")
             .setCancelable(false)
             .setPositiveButton("前往设置") { _, _ ->
                 // 持久化当前进度，再跳转设置页（跳转后本 Activity 销毁，返回时从 prefs 续上）

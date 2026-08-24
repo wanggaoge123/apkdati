@@ -38,12 +38,16 @@ class MainService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        repo = DictationRepository.get(this)
-
-        // 1) 启动前台通知（最低优先级、静音）
+        // 1) 最优先启动前台通知（最低优先级、静音）。
+        //    关键：Android 12+ 要求服务 onCreate 内尽快调用 startForeground，
+        //    否则系统抛 ForegroundServiceDidNotStartInTimeException 直接杀掉服务，
+        //    表现为"点开启没反应"。因此排在最前。
         startForegroundSafely()
 
-        // 2) 初始化计时器，达标后唤起弹窗（通过悬浮窗管理器）
+        // 2) 初始化仓库（Room，轻量，放前台之后避免阻塞前台调用）
+        repo = DictationRepository.get(this)
+
+        // 3) 初始化计时器，达标后唤起弹窗（通过悬浮窗管理器）
         tracker = ScreenTimeTracker(this) {
             onTriggerReached()
         }
@@ -51,16 +55,15 @@ class MainService : Service() {
         FloatWindowManager.ScreenTimeTrackerHolder.tracker = tracker
         tracker.start()
 
-        // 3) 拉起守护进程（双向守护）
+        // 4) 拉起守护进程（双向守护）
         startGuardProcess()
 
-        // 4) 数据种子
+        // 5) 数据种子
         scope.launch { repo.ensureSeed() }
     }
 
-    /** 计时达标：通过广播/桥唤起听写弹窗（具体弹窗由 FloatWindowManager 处理） */
+    /** 计时达标：通过悬浮窗管理器唤起听写弹窗（方案1：SYSTEM_ALERT_WINDOW） */
     private fun onTriggerReached() {
-        // 通知悬浮窗管理器弹出（若悬浮窗不可用，由无障碍兜底）
         FloatWindowManager.requestOpen(this)
         scope.launch { repo.reportTrigger() }
     }
