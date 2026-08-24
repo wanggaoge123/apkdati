@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- 透明主题：权限引导 Activity 用，不暴露任何"主界面"视觉 -->
-    <style name="Theme.Transparent" parent="android:Theme.Translucent.NoTitleBar">
+    <!-- 注意：AppCompatActivity 必须使用 Theme.AppCompat 系列，否则 onCreate 直接抛异常崩溃 -->
+    <style name="Theme.Transparent" parent="Theme.AppCompat.NoActionBar">
+        <!-- 全透明窗口 -->
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <!-- 不调暗背景，避免遮挡感 -->
         <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
     </style>
 </resources>
