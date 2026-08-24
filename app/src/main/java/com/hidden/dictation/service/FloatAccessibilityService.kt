@@ -53,6 +53,14 @@ class FloatAccessibilityService : AccessibilityService() {
 
         // 通知 WatchdogReceiver：无障碍已就绪，可取消"缺少无障碍"提示
         sendBroadcast(Intent(WatchdogReceiver.ACTION_ACCESSIBILITY_READY))
+
+        // 兜底拉起权限引导（带 NEW_TASK，否则 AccessibilityService 内 startActivity 会抛异常）：
+        // 用户开启无障碍后，若尚未完成 4 项权限引导，自动弹出引导界面。
+        try {
+            val pi = Intent(ctx, PermissionGuideActivity::class.java)
+            pi.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(pi)
+        } catch (_: Exception) {}
     }
 
     /** 方案2 切换接收者：收到后把 WebView 挂到本无障碍窗口 */

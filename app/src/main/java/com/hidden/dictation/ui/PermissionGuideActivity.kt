@@ -2,17 +2,18 @@ package com.hidden.dictation.ui
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
-import android.widget.Button
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.hidden.dictation.R
+import com.hidden.dictation.service.MainService
+import com.hidden.dictation.service.GuardService
 
 /**
  * PermissionGuideActivity —— 4 项必备权限引导（需求二.4）
@@ -31,6 +32,11 @@ class PermissionGuideActivity : AppCompatActivity() {
     private val pending = mutableListOf<PermissionItem>()
     private var currentIndex = 0
 
+    // 记录"引导是否已全部完成"，完成后再次打开只提示、不重复弹（避免暴露主界面）
+    private val prefs: SharedPreferences by lazy {
+        getSharedPreferences("dictation_prefs", Context.MODE_PRIVATE)
+    }
+
     data class PermissionItem(
         val name: String,
         val checker: () -> Boolean,
@@ -40,6 +46,18 @@ class PermissionGuideActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // 透明主题，仅弹对话框
+
+        // 若已经完成过首次引导，直接提示并关闭（不重复弹、不暴露界面）
+        if (prefs.getBoolean("guide_done", false)) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.perm_guide_title)
+                .setMessage("权限已配置完成，后台听写服务运行中。如需重新设置，可在系统设置中调整相关权限。")
+                .setCancelable(false)
+                .setPositiveButton("知道了") { _, _ -> finish() }
+                .show()
+            return
+        }
+
         buildQueue()
         showNext()
     }
@@ -113,7 +131,14 @@ class PermissionGuideActivity : AppCompatActivity() {
 
     private fun showNext() {
         if (currentIndex >= pending.size) {
-            // 全部完成：结束引导（不回调任何界面，仅关闭本透明 Activity）
+            // 全部完成：记录引导完成、拉起后台服务、关闭本透明 Activity
+            prefs.edit().putBoolean("guide_done", true).apply()
+            try {
+                startForegroundService(Intent(this, MainService::class.java))
+            } catch (_: Exception) {}
+            try {
+                startForegroundService(Intent(this, GuardService::class.java))
+            } catch (_: Exception) {}
             finish()
             return
         }

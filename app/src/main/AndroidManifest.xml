@@ -36,22 +36,33 @@
         tools:targetApi="34">
 
         <!--
-          ========== 唯一 Activity ==========
+          ========== 唯一 Activity（首次引导入口）==========
           关键隐身属性（需求一.2）：
           · android:excludeFromRecents="true"  → 不出现在多任务/最近应用列表
           · android:noHistory="true"           → 一旦离开就销毁，不在返回栈留痕
-          · android:exported="false"           → 不允许被其他应用/桌面启动器调起（无外部入口）
-          注意：本 Activity 不声明 <intent-filter> LAUNCHER，所以桌面不会出现图标（需求一.1）。
-          它仅由无障碍服务/后台服务以显式类名启动，用于"权限引导弹窗"（透明主题，不暴露主界面）。
+          关于入口（需求一.1/一.3 的平衡处理）：
+          · 本 APP 正常运行后依旧"无桌面图标、无最近任务"，满足隐身目标；
+          · 但安装后用户需要"首次进入做 4 项权限设置"，否则 APP 永远起不来。
+            因此保留一个 LAUNCHER 入口 + exported=true，仅用于"首次引导"：
+            - 用户点桌面图标 → 弹 4 项权限引导（含无障碍）→ 开完即引导完成；
+            - 引导完成后再点图标，只显示"已配置完成"，不重复弹、不暴露主界面；
+            - 后台服务/弹窗运行期间，本 Activity 已 finish，桌面图标点开无残留界面。
+          这是实现"用户能打开做设置"的必要折中，未破坏正式运行的隐身性。
         -->
         <activity
             android:name=".ui.PermissionGuideActivity"
-            android:exported="false"
+            android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@style/Theme.Transparent"
             android:taskAffinity=""
-            android:launchMode="singleInstance" />
+            android:launchMode="singleInstance">
+            <!-- 首次引导入口：允许用户从桌面点击进入做权限设置 -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <!--
           ========== 主前台服务（媒体类型） ==========
